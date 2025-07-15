@@ -93,7 +93,7 @@ async def iter_clients():
 # ---------------------------------------------------------------------------
 # 3. Core async job – mass report
 # ---------------------------------------------------------------------------
-async def report_username(username: str, reason, label: str, per_account: int = 25):
+async def report_username(username: str, reason, label: str, per_account: int = 10):
     async for client, phone in iter_clients():
         try:
             user = await client.get_input_entity(username)
@@ -101,9 +101,9 @@ async def report_username(username: str, reason, label: str, per_account: int = 
             for _ in range(per_account):
                 try:
                     await client(ReportRequest(user, [], reason, note))
-                    await asyncio.sleep(random.uniform(2.5, 6))
+                    await asyncio.sleep(random.uniform(5, 8))
                 except FloodWaitError as e:
-                    await asyncio.sleep(e.seconds + 1)
+                    await asyncio.sleep(e.seconds + 5)
         except Exception as e:
             logging.warning("Report error via %s: %s", phone, e)
         finally:
