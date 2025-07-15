@@ -46,7 +46,7 @@ from telethon.tl.types import (
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
-from aiogram.types import ParseMode
+from aiogram.enums import ParseMode  ✅
 
 SESSIONS_DIR = "sessions"
 ACCOUNTS_FILE = "accounts.json"
