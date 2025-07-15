@@ -2,11 +2,12 @@
 """
 Tele Report Bot – all‑in‑one CLI + Aiogram interface
 ---------------------------------------------------
-• **CLI** modes:
-    - `python tele_report_bot.py login`   → interactive user‑account login (Telethon)
-    - `python tele_report_bot.py status`  → show login status of saved sessions
-• **Bot** mode (default):
-    - `python tele_report_bot.py`         → starts Aiogram bot
+• **CLI modes**
+    python tele_report_bot.py login   → interactive user‑account login (Telethon)
+    python tele_report_bot.py status  → show login status of saved sessions
+
+• **Bot mode (default)**
+    python tele_report_bot.py         → starts Aiogram bot
 
 Admin‑only bot commands
 -----------------------
@@ -18,11 +19,11 @@ Admin‑only bot commands
 
 Notes
 -----
-* User sessions live in `sessions/`.
-* Account registry in `accounts.json`.
-* Initial admins loaded from env var `ADMIN_IDS` (comma‑separated integers).
-* Runtime /addadmin updates only live until process restarts unless you also update env/db.
-* Requires: aiogram, telethon, python‑dotenv
+* User sessions live in `sessions/`
+* Account registry in `accounts.json`
+* Initial admins loaded from env var `ADMIN_IDS` (comma‑separated ints)
+* Runtime /addadmin updates live only until restart unless you persist them
+* Requires: aiogram>=3.4, telethon>=1.33, python‑dotenv
 """
 
 import os
@@ -45,8 +46,9 @@ from telethon.tl.types import (
 )
 
 from aiogram import Bot, Dispatcher, types
-from aiogram.filters import Command
 from aiogram.enums import ParseMode
+from aiogram.filters import Command
+from aiogram.client.default import DefaultBotProperties
 
 SESSIONS_DIR = "sessions"
 ACCOUNTS_FILE = "accounts.json"
@@ -66,7 +68,7 @@ ADMIN_IDS: Set[int] = {int(x) for x in _admin_env.replace(" ", "").split(",") if
 # ---------------------------------------------------------------------------
 # 1. Initialise Aiogram bot / dispatcher
 # ---------------------------------------------------------------------------
-bot = Bot(BOT_TOKEN, parse_mode=ParseMode.HTML)
+bot = Bot(BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 
 # ---------------------------------------------------------------------------
@@ -128,7 +130,7 @@ async def start_cmd(msg: types.Message):
         "<b>Admin commands</b>:\n"
         "• /report &lt;user&gt; &lt;1‑5&gt; – mass‑report\n"
         "• /addadmin &lt;id|@user&gt; – add admin (runtime)\n"
-        "• /accounts – how many sessions\n"
+        "• /accounts – session count\n"
         "• /status – session auth status\n"
     )
 
@@ -171,14 +173,13 @@ async def status_cmd(msg: types.Message):
         try:
             client = TelegramClient(f"{SESSIONS_DIR}/{phone}", acc["api_id"], acc["api_hash"])
             await client.connect()
-            auth = await client.is_user_authorized()
+            ok = await client.is_user_authorized()
             await client.disconnect()
-            lines.append(f"{phone}: {'✅' if auth else '❌'}")
+            lines.append(f"{phone}: {'✅' if ok else '❌'}")
         except Exception as e:
             lines.append(f"{phone}: ⚠️ {e}")
     await msg.reply("\n".join(lines))
 
-# ---------- NEW: /addadmin supports <id> *or* @username ----------
 @dp.message(Command("addadmin"))
 @admin_only
 async def addadmin_cmd(msg: types.Message):
@@ -187,15 +188,15 @@ async def addadmin_cmd(msg: types.Message):
         return await msg.reply("Usage: /addadmin &lt;user_id | @username&gt;")
     target = parts[1].strip()
 
-    # 1️⃣ If numeric
+    # 1️⃣ numeric id
     if target.lstrip("-").isdigit():
         new_id = int(target)
     else:
-        # 2️⃣ Resolve username → id
+        # 2️⃣ resolve username
         if target.startswith("@"):
             target = target[1:]
         try:
-            chat = await bot.get_chat(target)  # needs mutual chat or PM /start
+            chat = await bot.get_chat(target)
             new_id = chat.id
         except Exception as e:
             return await msg.reply(f"❌ Could not resolve username: {e}")
@@ -252,8 +253,7 @@ async def cli_status():
 # ---------------------------------------------------------------------------
 # 7. Entrypoint – argparse
 # ---------------------------------------------------------------------------
-
-def run_cli():
+if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Tele Report Bot")
     parser.add_argument(
@@ -265,15 +265,11 @@ def run_cli():
     )
     args = parser.parse_args()
 
+    logging.basicConfig(level=logging.INFO)
+
     if args.mode == "login":
         asyncio.run(cli_login())
     elif args.mode == "status":
         asyncio.run(cli_status())
     else:
-        logging.basicConfig(level=logging.INFO)
-        from aiogram import executor
-        executor.start_polling(dp, skip_updates=True)
-
-# ---------------------------------------------------------------------------
-if __name__ == "__main__":
-    run_cli()
+        asyncio.run(dp.start_polling(bot))
